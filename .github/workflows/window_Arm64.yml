@@ -60,6 +60,23 @@ jobs:
           Start-Process -FilePath ".\LLVM-woa64.exe" -ArgumentList "/S" -Wait
           echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
   
+      - name: Setup vcpkg
+        uses: microsoft/setup-vcpkg@v1
+        with:
+          vcpkg-version: 'latest'
+  
+      - name: Install Arrow dependencies via vcpkg
+        shell: pwsh
+        run: |
+          # Install ARM64 dependencies
+          vcpkg install --triplet=arm64-windows `
+            boost-filesystem boost-system boost-algorithm boost-crc `
+            snappy brotli lz4 zlib zstd bzip2 `
+            openssl gflags thrift protobuf rapidjson re2 `
+            utf8proc xsimd nlohmann-json `
+            abseil crc32c benchmark gtest `
+            grpc aws-sdk-cpp azure-sdk-for-cpp google-cloud-cpp
+  
       - name: Build
         shell: pwsh
         run: |
