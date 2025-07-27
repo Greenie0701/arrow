@@ -87,8 +87,14 @@ try {
         }
     }
 
-    # Configure CMake arguments
+    # Configure CMake arguments for ARM64 cross-compilation
     $cmake_args = @(
+        "-DCMAKE_SYSTEM_NAME=Windows"
+        "-DCMAKE_SYSTEM_PROCESSOR=ARM64"
+        "-DCMAKE_C_COMPILER=clang-cl"
+        "-DCMAKE_CXX_COMPILER=clang-cl"
+        "-DCMAKE_C_COMPILER_TARGET=aarch64-pc-windows-msvc"
+        "-DCMAKE_CXX_COMPILER_TARGET=aarch64-pc-windows-msvc"
         "-Dabsl_SOURCE=$($env:absl_SOURCE ?? '')"
         "-DARROW_ACERO=$($env:ARROW_ACERO ?? 'OFF')"
         "-DARROW_AZURE=$($env:ARROW_AZURE ?? 'OFF')"
