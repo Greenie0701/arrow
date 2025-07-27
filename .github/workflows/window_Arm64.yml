@@ -11,7 +11,11 @@ jobs:
     runs-on: windows-11-arm
     if: ${{ !contains(github.event.pull_request.title, 'WIP') }}
     timeout-minutes: 120
+
     env:
+      VCPKG_ROOT: C:\vcpkg
+      VCPKG_DEFAULT_TRIPLET: arm64-windows
+      ARROW_HOME: /clang-winarm64
       ARROW_BUILD_SHARED: ON
       ARROW_BUILD_STATIC: OFF
       ARROW_BUILD_TESTS: ON
@@ -23,7 +27,6 @@ jobs:
       ARROW_GANDIVA: ON
       ARROW_GCS: ON
       ARROW_HDFS: OFF
-      ARROW_HOME: /clang-winarm64
       ARROW_JEMALLOC: OFF
       ARROW_PARQUET: ON
       ARROW_S3: ON
@@ -40,44 +43,47 @@ jobs:
       ARROW_CMAKE_ARGS: >-
         -DARROW_PACKAGE_PREFIX=/clang-winarm64
         -DCMAKE_FIND_PACKAGE_PREFER_CONFIG=ON
-  
+
     steps:
       - name: Checkout Arrow
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: recursive
-  
-      - name: Set MSVC for Windows-ARM64
-        uses: bus1/cabuild/action/msdevshell@e22aba57d6e74891d059d66501b6b5aed8123c4d  # v1
+
+      - name: Set MSVC for Windows ARM64
+        uses: bus1/cabuild/action/msdevshell@v1
         with:
           architecture: arm64
-  
+
       - name: Install LLVM
         shell: pwsh
         run: |
-          Invoke-WebRequest https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.8/LLVM-20.1.8-woa64.exe -UseBasicParsing -OutFile LLVM-woa64.exe
-          Start-Process -FilePath ".\LLVM-woa64.exe" -ArgumentList "/S" -Wait
+          Invoke-WebRequest https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.8/LLVM-20.1.8-woa64.exe -OutFile LLVM-woa64.exe
+          Start-Process -FilePath .\LLVM-woa64.exe -ArgumentList "/S" -Wait
           echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-  
+
       - name: Setup vcpkg
         shell: pwsh
         run: |
-          # Clone vcpkg
-          git clone https://github.com/Microsoft/vcpkg.git C:\vcpkg
-          cd C:\vcpkg
+          git clone https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT
+          cd $env:VCPKG_ROOT
           .\bootstrap-vcpkg.bat
-          
-          # Set environment variable
-          echo "VCPKG_ROOT=C:\vcpkg" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "C:\vcpkg" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-  
-      - name: Install Arrow dependencies via vcpkg (explicit)
+          echo "$env:VCPKG_ROOT" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      # Optional: Speed up CI by caching vcpkg build artifacts
+      - name: Restore vcpkg cache
+        uses: actions/cache@v4
+        with:
+          path: C:\vcpkg\installed
+          key: vcpkg-${{ runner.os }}-arm64-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-arm64-
+
+      - name: Install dependencies via vcpkg
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-      
-          cd C:\vcpkg
+          cd $env:VCPKG_ROOT
           .\vcpkg install `
             abseil `
             aws-sdk-cpp[config,cognito-identity,identity-management,s3,sts,transfer] `
@@ -118,8 +124,8 @@ jobs:
             zlib `
             zstd `
             --triplet=arm64-windows
-        
-      - name: Build
+
+      - name: Build Arrow (C++)
         shell: pwsh
         run: |
           $env:CMAKE_BUILD_PARALLEL_LEVEL = $env:NUMBER_OF_PROCESSORS
