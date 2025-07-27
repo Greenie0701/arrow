@@ -87,7 +87,7 @@ try {
         }
     }
 
-    # Configure CMake arguments for ARM64 cross-compilation
+    # Configure CMake arguments for ARM64 cross-compilation with vcpkg
     $cmake_args = @(
         "-DCMAKE_SYSTEM_NAME=Windows"
         "-DCMAKE_SYSTEM_PROCESSOR=ARM64"
@@ -95,6 +95,9 @@ try {
         "-DCMAKE_CXX_COMPILER=clang-cl"
         "-DCMAKE_C_COMPILER_TARGET=aarch64-pc-windows-msvc"
         "-DCMAKE_CXX_COMPILER_TARGET=aarch64-pc-windows-msvc"
+        "-DCMAKE_TOOLCHAIN_FILE=$($env:VCPKG_ROOT)/scripts/buildsystems/vcpkg.cmake"
+        "-DVCPKG_TARGET_TRIPLET=arm64-windows"
+        "-DARROW_DEPENDENCY_SOURCE=SYSTEM"
         "-Dabsl_SOURCE=$($env:absl_SOURCE ?? '')"
         "-DARROW_ACERO=$($env:ARROW_ACERO ?? 'OFF')"
         "-DARROW_AZURE=$($env:ARROW_AZURE ?? 'OFF')"
