@@ -102,7 +102,7 @@ jobs:
             glog `
             google-cloud-cpp[storage] `
             grpc `
-            gtest[cxx17] `
+            gtest `
             lz4 `
             openssl `
             orc `
