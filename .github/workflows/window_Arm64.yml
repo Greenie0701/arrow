@@ -1,5 +1,4 @@
 name: Windows tests
-
 on:
   push:
     branches:
@@ -11,7 +10,6 @@ jobs:
     runs-on: windows-11-arm
     if: ${{ !contains(github.event.pull_request.title, 'WIP') }}
     timeout-minutes: 120
-
     env:
       VCPKG_ROOT: C:\vcpkg
       VCPKG_DEFAULT_TRIPLET: arm64-windows
@@ -66,9 +64,27 @@ jobs:
       - name: Setup vcpkg
         shell: pwsh
         run: |
-          git clone https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT
-          cd $env:VCPKG_ROOT
-          .\bootstrap-vcpkg.bat
+          # Use existing Visual Studio vcpkg installation
+          $vsVcpkgPath = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\vcpkg"
+          if (Test-Path $vsVcpkgPath) {
+            Write-Host "Using existing Visual Studio vcpkg at: $vsVcpkgPath"
+            $env:VCPKG_ROOT = $vsVcpkgPath
+            cd $vsVcpkgPath
+            
+            # Update vcpkg to latest version
+            git pull
+            
+            # Bootstrap if needed
+            if (!(Test-Path ".\vcpkg.exe")) {
+              .\bootstrap-vcpkg.bat
+            }
+          } else {
+            # Fallback: clone fresh vcpkg
+            git clone https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT
+            cd $env:VCPKG_ROOT
+            .\bootstrap-vcpkg.bat
+          }
+          
           echo "$env:VCPKG_ROOT" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       # Optional: Speed up CI by caching vcpkg build artifacts
