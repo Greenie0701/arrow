@@ -574,7 +574,8 @@ jobs:
       - name: Build
         shell: cmd
         run: |
-          bash -c "ci/scripts/cpp_build.sh $(pwd) $(pwd)/build"
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" arm64
+          bash -c "CMAKE_C_COMPILER=clang-cl CMAKE_CXX_COMPILER=clang-cl ARROW_CMAKE_ARGS='-DBOOST_EXCLUDE_LIBRARIES=mpi;graph_parallel;coroutine' ci/scripts/cpp_build.sh $(pwd) $(pwd)/build"
       - name: Test
         shell: bash
         run: |
