@@ -557,8 +557,18 @@ jobs:
           key: cpp-ccache-windows-${{ env.CACHE_VERSION }}-${{ hashFiles('cpp/**') }}
           restore-keys: cpp-ccache-windows-${{ env.CACHE_VERSION }}-
         env:
-          # We can invalidate the current cache by updating this.
           CACHE_VERSION: "2022-09-13"
+  
+      # 👇 Add vcpkg setup here
+      - name: Setup vcpkg
+        shell: pwsh
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT
+          & $env:VCPKG_ROOT\bootstrap-vcpkg.bat
+          & $env:VCPKG_ROOT\vcpkg.exe install openssl:arm64-windows
+          echo "VCPKG_ROOT=$env:VCPKG_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+  
       - name: Install LLVM for Win-ARM64
         shell: pwsh
         run: |
@@ -571,10 +581,12 @@ jobs:
           }
           Start-Process -FilePath ".\LLVM-woa64.exe" -ArgumentList "/S" -Wait
           echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+  
       - name: Build
         shell: cmd
         run: |
-          bash -c "ARROW_CMAKE_ARGS='-DBOOST_EXCLUDE_LIBRARIES=mpi;graph_parallel;coroutine -DBOOST_CONTEXT_IMPLEMENTATION=winfib -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl' ci/scripts/cpp_build.sh $(pwd) $(pwd)/build"
+          bash -c "ARROW_CMAKE_ARGS='-DBOOST_EXCLUDE_LIBRARIES=mpi;graph_parallel;coroutine -DBOOST_CONTEXT_IMPLEMENTATION=winfib -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_TOOLCHAIN_FILE=$CMAKE_TOOLCHAIN_FILE' ci/scripts/cpp_build.sh $(pwd) $(pwd)/build"
+  
       - name: Test
         shell: bash
         run: |
