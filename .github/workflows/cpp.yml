@@ -559,15 +559,16 @@ jobs:
         env:
           CACHE_VERSION: "2022-09-13"
   
-      # 👇 Add vcpkg setup here
       - name: Setup vcpkg
         shell: pwsh
         run: |
+          $env:VCPKG_ROOT = "$env:GITHUB_WORKSPACE\vcpkg"
           git clone https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT
-          & $env:VCPKG_ROOT\bootstrap-vcpkg.bat
-          & $env:VCPKG_ROOT\vcpkg.exe install openssl:arm64-windows
+          & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat"
+          & "$env:VCPKG_ROOT\vcpkg.exe" install openssl:arm64-windows
           echo "VCPKG_ROOT=$env:VCPKG_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           echo "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
   
       - name: Install LLVM for Win-ARM64
         shell: pwsh
