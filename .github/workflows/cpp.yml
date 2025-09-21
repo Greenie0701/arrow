@@ -559,17 +559,6 @@ jobs:
         env:
           CACHE_VERSION: "2022-09-13"
   
-      - name: Setup vcpkg
-        shell: pwsh
-        run: |
-          $env:VCPKG_ROOT = "$env:GITHUB_WORKSPACE\vcpkg"
-          git clone https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT
-          & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat"
-          & "$env:VCPKG_ROOT\vcpkg.exe" install openssl:arm64-windows
-          echo "VCPKG_ROOT=$env:VCPKG_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-  
       - name: Install LLVM for Win-ARM64
         shell: pwsh
         run: |
@@ -586,8 +575,8 @@ jobs:
       - name: Build
         shell: cmd
         run: |
-          bash -c "ARROW_CMAKE_ARGS='-DBOOST_EXCLUDE_LIBRARIES=mpi;graph_parallel;coroutine -DBOOST_CONTEXT_IMPLEMENTATION=winfib -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_TOOLCHAIN_FILE=$CMAKE_TOOLCHAIN_FILE' ci/scripts/cpp_build.sh $(pwd) $(pwd)/build"
-  
+          bash -c "ARROW_CMAKE_ARGS='-DARROW_WITH_OPENSSL=OFF -DARROW_S3=OFF -DARROW_FLIGHT=OFF -DBOOST_EXCLUDE_LIBRARIES=mpi;graph_parallel;coroutine -DBOOST_CONTEXT_IMPLEMENTATION=winfib -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_TOOLCHAIN_FILE=$CMAKE_TOOLCHAIN_FILE' ci/scripts/cpp_build.sh $(pwd) $(pwd)/build"
+
       - name: Test
         shell: bash
         run: |
