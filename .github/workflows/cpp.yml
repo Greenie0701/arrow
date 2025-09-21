@@ -130,108 +130,43 @@ jobs:
         shell: bash
         run: ci/scripts/download_tz_database.sh
       
-      - name: Install OpenSSL for ARM64
+      - name: Install OpenSSL via vcpkg
         shell: pwsh
         run: |
-          # Download OpenSSL ARM64 installer
-          $url = "https://slproweb.com/download/Win64ARMOpenSSL_Light-3_5_3.msi"
-          $installer = "Win64ARMOpenSSL_Light-3_5_3.msi"
+          Write-Host "Installing OpenSSL via vcpkg for ARM64..."
           
-          Write-Host "Downloading OpenSSL ARM64..."
-          Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
-          
-          # Verify file exists
-          if (-not (Test-Path $installer)) {
-              Write-Error "Failed to download OpenSSL installer"
-              exit 1
+          # Install vcpkg if not already available
+          if (-not (Test-Path "C:\vcpkg")) {
+              Write-Host "Cloning vcpkg..."
+              git clone https://github.com/Microsoft/vcpkg.git C:\vcpkg
+              C:\vcpkg\bootstrap-vcpkg.bat
           }
           
-          Write-Host "Installing OpenSSL ARM64..."
-          # Install silently with custom install directory
-          $installDir = "C:\OpenSSL"
-          Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", $installer, "/quiet", "/norestart", "INSTALLDIR=$installDir" -Wait -NoNewWindow
+          # Install OpenSSL for ARM64
+          Write-Host "Installing OpenSSL ARM64 via vcpkg..."
+          C:\vcpkg\vcpkg.exe install openssl:arm64-windows
           
-          # Try multiple possible installation paths (ARM64 version installs to OpenSSL-Win64-ARM)
-          $possiblePaths = @(
-              "C:\Program Files\OpenSSL-Win64-ARM",
-              "C:\OpenSSL",
-              "C:\Program Files\OpenSSL-Win64",
-              "C:\Program Files\OpenSSL",
-              "C:\Program Files (x86)\OpenSSL-Win64-ARM",
-              "C:\Program Files (x86)\OpenSSL-Win64"
-          )
+          # Set environment variables for CMake
+          $vcpkgRoot = "C:\vcpkg"
+          echo "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "VCPKG_TARGET_TRIPLET=arm64-windows" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           
-          $opensslPath = $null
-          foreach ($path in $possiblePaths) {
-              Write-Host "Checking for OpenSSL at: $path"
-              if (Test-Path $path) {
-                  $opensslPath = $path
-                  Write-Host "Found OpenSSL at: $opensslPath"
-                  break
-              }
-          }
-          
-          # If not found in standard locations, search for it
-          if (-not $opensslPath) {
-              Write-Host "Searching for OpenSSL installation..."
-              $searchPaths = Get-ChildItem -Path "C:\Program Files*" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*OpenSSL*" }
-              if ($searchPaths) {
-                  $opensslPath = $searchPaths[0].FullName
-                  Write-Host "Found OpenSSL via search at: $opensslPath"
-              }
-          }
-          
-          if ($opensslPath -and (Test-Path $opensslPath)) {
-              Write-Host "OpenSSL installed successfully at: $opensslPath"
+          # Verify installation
+          $opensslPath = "$vcpkgRoot\installed\arm64-windows"
+          if (Test-Path "$opensslPath\include\openssl") {
+              Write-Host "OpenSSL installed successfully via vcpkg"
+              Write-Host "Include path: $opensslPath\include"
+              Write-Host "Library path: $opensslPath\lib"
               
-              # Verify required directories exist
-              $binPath = Join-Path $opensslPath "bin"
-              $includePath = Join-Path $opensslPath "include"
-              $libPath = Join-Path $opensslPath "lib"
-              
-              Write-Host "Checking OpenSSL structure:"
-              Write-Host "  Bin path: $binPath - Exists: $(Test-Path $binPath)"
-              Write-Host "  Include path: $includePath - Exists: $(Test-Path $includePath)"
-              Write-Host "  Lib path: $libPath - Exists: $(Test-Path $libPath)"
-              
-              # Add to PATH for this session
-              if (Test-Path $binPath) {
-                  echo "$binPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-              }
-              
-              # Set environment variables for CMake
-              echo "OPENSSL_ROOT_DIR=$opensslPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-              
-              if (Test-Path $includePath) {
-                  echo "OPENSSL_INCLUDE_DIR=$includePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-              }
-              
-              # Look for library files
-              if (Test-Path $libPath) {
-                  $cryptoLib = Get-ChildItem -Path $libPath -Name "*crypto*.lib" | Select-Object -First 1
-                  $sslLib = Get-ChildItem -Path $libPath -Name "*ssl*.lib" | Select-Object -First 1
-                  
-                  if ($cryptoLib) {
-                      $cryptoLibPath = Join-Path $libPath $cryptoLib
-                      echo "OPENSSL_CRYPTO_LIBRARY=$cryptoLibPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-                      Write-Host "  Crypto library: $cryptoLibPath"
-                  }
-                  
-                  if ($sslLib) {
-                      $sslLibPath = Join-Path $libPath $sslLib
-                      echo "OPENSSL_SSL_LIBRARY=$sslLibPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-                      Write-Host "  SSL library: $sslLibPath"
-                  }
+              # List the actual library files
+              if (Test-Path "$opensslPath\lib") {
+                  Write-Host "Available library files:"
+                  Get-ChildItem -Path "$opensslPath\lib" -Filter "*.lib" | ForEach-Object { Write-Host "  $($_.Name)" }
               }
           } else {
-              Write-Error "OpenSSL installation failed - directory not found in any expected location"
-              Write-Host "Listing Program Files directories for debugging:"
-              Get-ChildItem -Path "C:\Program Files*" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*SSL*" -or $_.Name -like "*OpenSSL*" } | ForEach-Object { Write-Host "  $($_.FullName)" }
+              Write-Error "vcpkg OpenSSL installation failed"
               exit 1
           }
-          
-          # Clean up installer
-          Remove-Item $installer -Force
       
       - name: Install ccache
         shell: bash
@@ -274,8 +209,8 @@ jobs:
       - name: Build
         shell: cmd
         run: |
-          bash -c "ARROW_CMAKE_ARGS='-DARROW_WITH_OPENSSL=ON -DARROW_S3=OFF -DARROW_FLIGHT=OFF -DBOOST_EXCLUDE_LIBRARIES=mpi;graph_parallel;coroutine -DBOOST_CONTEXT_IMPLEMENTATION=winfib -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DOPENSSL_ROOT_DIR=%OPENSSL_ROOT_DIR% -DOPENSSL_INCLUDE_DIR=%OPENSSL_INCLUDE_DIR% -DOPENSSL_CRYPTO_LIBRARY=%OPENSSL_CRYPTO_LIBRARY% -DOPENSSL_SSL_LIBRARY=%OPENSSL_SSL_LIBRARY%' ci/scripts/cpp_build.sh $(pwd) $(pwd)/build"
-      
+          bash -c "ARROW_CMAKE_ARGS='-DARROW_WITH_OPENSSL=ON -DARROW_S3=OFF -DARROW_FLIGHT=OFF -DBOOST_EXCLUDE_LIBRARIES=mpi;graph_parallel;coroutine -DBOOST_CONTEXT_IMPLEMENTATION=winfib -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=arm64-windows' ci/scripts/cpp_build.sh $(pwd) $(pwd)/build"
+    
       - name: Test
         shell: bash
         run: |
