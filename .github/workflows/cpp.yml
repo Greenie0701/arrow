@@ -480,7 +480,7 @@ jobs:
         shell: msys2 {0}
         run: |
           ci/scripts/cpp_test.sh "$(pwd)" "$(pwd)/build"
-  
+    
   Windows_ARM64:
     name: ARM64 Windows LLVM CLANG
     runs-on: windows-11-arm
@@ -529,27 +529,74 @@ jobs:
             /t REG_DWORD `
             /d 1 `
             /f
+      
       - name: Checkout Arrow
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
           submodules: recursive
+      
       - name: Download Timezone Database
         shell: bash
         run: ci/scripts/download_tz_database.sh
+      
+      - name: Install OpenSSL for ARM64
+        shell: pwsh
+        run: |
+          # Download OpenSSL ARM64 installer
+          $url = "https://slproweb.com/download/Win64ARMOpenSSL_Light-3_5_3.msi"
+          $installer = "Win64ARMOpenSSL_Light-3_5_3.msi"
+          
+          Write-Host "Downloading OpenSSL ARM64..."
+          Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
+          
+          # Verify file exists
+          if (-not (Test-Path $installer)) {
+              Write-Error "Failed to download OpenSSL installer"
+              exit 1
+          }
+          
+          Write-Host "Installing OpenSSL ARM64..."
+          # Install silently
+          Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", $installer, "/quiet", "/norestart" -Wait -NoNewWindow
+          
+          # Verify installation
+          $opensslPath = "C:\Program Files\OpenSSL-Win64"
+          if (Test-Path $opensslPath) {
+              Write-Host "OpenSSL installed successfully at: $opensslPath"
+              
+              # Add to PATH for this session
+              echo "$opensslPath\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+              
+              # Set environment variables for CMake
+              echo "OPENSSL_ROOT_DIR=$opensslPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+              echo "OPENSSL_INCLUDE_DIR=$opensslPath\include" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+              echo "OPENSSL_CRYPTO_LIBRARY=$opensslPath\lib\libcrypto.lib" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+              echo "OPENSSL_SSL_LIBRARY=$opensslPath\lib\libssl.lib" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          } else {
+              Write-Error "OpenSSL installation failed - directory not found"
+              exit 1
+          }
+          
+          # Clean up installer
+          Remove-Item $installer -Force
+      
       - name: Install ccache
         shell: bash
         run: |
           ci/scripts/install_ccache.sh 4.6.3 /usr
+      
       - name: Setup ccache
         shell: bash
         run: |
           ci/scripts/ccache_setup.sh
+      
       - name: ccache info
         id: ccache-info
         shell: bash
         run: |
           echo "cache-dir=$(ccache --get-config cache_dir)" >> $GITHUB_OUTPUT
+      
       - name: Cache ccache
         uses: actions/cache@v4
         with:
@@ -558,7 +605,7 @@ jobs:
           restore-keys: cpp-ccache-windows-${{ env.CACHE_VERSION }}-
         env:
           CACHE_VERSION: "2022-09-13"
-  
+      
       - name: Install LLVM for Win-ARM64
         shell: pwsh
         run: |
@@ -566,17 +613,17 @@ jobs:
           $expectedHash = "3f181aecc83d0eb40fb966ce18b97a3602871dbff83fc91745e7e0fd6661a7f7"
           $fileHash = (Get-FileHash -Path "LLVM-woa64.exe" -Algorithm SHA256).Hash
           if ($fileHash -ne $expectedHash) {
-              Write-Error "Checksum verification failed. The downloaded file may be corrupted or tampered with."
-              exit 1
+            Write-Error "Checksum verification failed. The downloaded file may be corrupted or tampered with."
+            exit 1
           }
           Start-Process -FilePath ".\LLVM-woa64.exe" -ArgumentList "/S" -Wait
           echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-  
+      
       - name: Build
         shell: cmd
         run: |
-          bash -c "ARROW_CMAKE_ARGS='-DARROW_WITH_OPENSSL=OFF -DARROW_S3=OFF -DARROW_FLIGHT=OFF -DARROW_S3=OFF -DARROW_FLIGHT=OFF -DBOOST_EXCLUDE_LIBRARIES=mpi;graph_parallel;coroutine -DBOOST_CONTEXT_IMPLEMENTATION=winfib -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl' ci/scripts/cpp_build.sh $(pwd) $(pwd)/build"
-
+          bash -c "ARROW_CMAKE_ARGS='-DARROW_WITH_OPENSSL=ON -DARROW_S3=OFF -DARROW_FLIGHT=OFF -DBOOST_EXCLUDE_LIBRARIES=mpi;graph_parallel;coroutine -DBOOST_CONTEXT_IMPLEMENTATION=winfib -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DOPENSSL_ROOT_DIR=%OPENSSL_ROOT_DIR% -DOPENSSL_INCLUDE_DIR=%OPENSSL_INCLUDE_DIR% -DOPENSSL_CRYPTO_LIBRARY=%OPENSSL_CRYPTO_LIBRARY% -DOPENSSL_SSL_LIBRARY=%OPENSSL_SSL_LIBRARY%' ci/scripts/cpp_build.sh $(pwd) $(pwd)/build"
+      
       - name: Test
         shell: bash
         run: |
